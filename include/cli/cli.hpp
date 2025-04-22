@@ -5,29 +5,20 @@
 #include <string>
 #include <map>
 #include <functional>
+#include <unordered_map>
+#include <memory>
 
 using validationCondition = std::function<bool(const std::string&)>;
 
 class CommandLineInterface {
 private:
-    std::map<std::string, Option*> optionsMap;
-    std::map<std::string, FloatingOption*> floatingOptionsMap;
+    std::unordered_map<std::string, std::unique_ptr<Option>> optionsMap;
+    std::unordered_map<std::string, std::unique_ptr<FloatingOption>> floatingOptionsMap;
 
 public:
-    // Factory method
-    Option* createOptionFromType(int optionType,
-                                 double underlyingPrice,
-                                 double strikePrice,
-                                 double volatility,
-                                 double dividendRate,
-                                 double interestRate,
-                                 double timeToExpiration,
-                                 double barrier,
-                                 bool isCallOption);
-
     // Parameter collection
-    Option* takeFixedOptionValues(int optionType);
-    FloatingOption* takeFloatingOptionValues(int optionType);
+    std::unique_ptr<Option> takeFixedOptionValues(int optionType);
+    std::unique_ptr<FloatingOption> takeFloatingOptionValues(int optionType);
 
     // I/O utilities
     void getPricingDetails(double& simulations, double& timeSteps);

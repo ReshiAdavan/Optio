@@ -4,6 +4,8 @@
 #include "options/asianOption.hpp"
 #include "options/lookbackOption.hpp"
 #include "options/barrierOption.hpp"
+#include "options/baseOption.hpp"
+#include "factory/optionFactory.hpp"
 #include "utils/utilFunctions.hpp"
 #include <iostream>
 #include <limits>
@@ -32,24 +34,7 @@ double getValidatedInput(const string& prompt, validationCondition validate) {
 }
 
 // --- CommandLineInterface Core ---
-
-Option* CommandLineInterface::createOptionFromType(int optionType, double underlyingPrice, double strikePrice, double volatility,
-                                                   double dividendRate, double interestRate, double timeToExpiration,
-                                                   double barrier, bool isCallOption) {
-    switch (optionType) {
-        case 1: return new EuropeanOption(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, isCallOption);
-        case 2: return new AmericanOption(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, isCallOption);
-        case 3: return new AsianOptionFixed(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, isCallOption);
-        case 4: return new LookbackOptionFixed(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, isCallOption);
-        case 5: return new BarrierDownIn(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, barrier, isCallOption);
-        case 6: return new BarrierUpIn(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, barrier, isCallOption);
-        case 7: return new BarrierDownOut(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, barrier, isCallOption);
-        case 8: return new BarrierUpOut(underlyingPrice, strikePrice, volatility, dividendRate, interestRate, timeToExpiration, barrier, isCallOption);
-        default: return nullptr;
-    }
-}
-
-Option* CommandLineInterface::takeFixedOptionValues(int optionType) {
+std::unique_ptr<Option> CommandLineInterface::takeFixedOptionValues(int optionType) {
     double S = getValidatedInput("Enter underlying price: ", isValidNumber);
     double K = getValidatedInput("Enter strike price: ", isValidNumber);
     double vol = getValidatedInput("Enter volatility: ", isValidNumber);
@@ -63,10 +48,11 @@ Option* CommandLineInterface::takeFixedOptionValues(int optionType) {
         barrier = getValidatedInput("Enter barrier price: ", isValidNumber);
     }
 
-    return createOptionFromType(optionType, S, K, vol, div, r, T, barrier, isCall);
+    std::unique_ptr<Option> option = OptionFactory::createFixedOption(optionType, S, K, vol, div, r, T, barrier, isCall);
+    return option;
 }
 
-FloatingOption* CommandLineInterface::takeFloatingOptionValues(int optionType) {
+std::unique_ptr<FloatingOption> CommandLineInterface::takeFloatingOptionValues(int optionType) {
     double S = getValidatedInput("Enter underlying price: ", isValidNumber);
     double vol = getValidatedInput("Enter volatility: ", isValidNumber);
     double div = getValidatedInput("Enter dividend rate: ", isValidNumber);
@@ -74,11 +60,8 @@ FloatingOption* CommandLineInterface::takeFloatingOptionValues(int optionType) {
     double T = getValidatedInput("Enter time to expiry: ", isValidNumber);
     bool isCall = static_cast<bool>(getValidatedInput("Is it a call? (1 = Call, 0 = Put): ", isOneOrZero));
 
-    switch (optionType) {
-        case 1: return new AsianOptionFloating(S, vol, div, r, T, isCall);
-        case 2: return new LookbackOptionFloating(S, vol, div, r, T, isCall);
-        default: return nullptr;
-    }
+    std::unique_ptr<FloatingOption> option = OptionFactory::createFloatingOption(optionType, S, vol, div, r, T, isCall);
+    return option;
 }
 
 void CommandLineInterface::getPricingDetails(double& simulations, double& timeSteps) {
@@ -173,8 +156,8 @@ void CommandLineInterface::createOption(const std::string& optionType) {
     if (optionType == "European") {
         cout << "European option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(1);
-        EuropeanOption* europeanOption = static_cast<EuropeanOption*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(1);
+        EuropeanOption* europeanOption = static_cast<EuropeanOption*>(option.get());
 
         cout << "Choose the appropriate choices to price you European option: " << endl;
         cout << "1. Black Scholes pricer" << endl;
@@ -201,14 +184,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
 
         europeanOption->calculateGreeks();
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = europeanOption;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "American") {
         cout << "American option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(2);
-        AmericanOption* americanOption = static_cast<AmericanOption*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(2);
+        AmericanOption* americanOption = static_cast<AmericanOption*>(option.get());
 
         double timesteps;
         cout << "As default, a Leisen-Reimer binary tree pricer will be used, please input the number of time-steps you would like to use:" << endl;
@@ -220,14 +203,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
 
         americanOption->calculateGreeks();
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = americanOption;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Asian Fixed") {
         cout << "Asian Fixed Strike option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(3);
-        AsianOptionFixed* asianOptionFixed = static_cast<AsianOptionFixed*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(3);
+        AsianOptionFixed* asianOptionFixed = static_cast<AsianOptionFixed*>(option.get());
 
         double timesteps;
         double simulations;
@@ -238,14 +221,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = asianOptionFixed;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Asian Floating") {
         cout << "Asian Floating Strike option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        FloatingOption* option = takeFloatingOptionValues(1);
-        AsianOptionFloating* asianOptionFloating = static_cast<AsianOptionFloating*>(option);
+        std::unique_ptr<FloatingOption> option = takeFloatingOptionValues(1);
+        AsianOptionFloating* asianOptionFloating = static_cast<AsianOptionFloating*>(option.get());
 
         double timesteps;
         double simulations;
@@ -256,14 +239,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        floatingOptionsMap[optionName] = asianOptionFloating;
+        floatingOptionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Lookback Fixed") {
         cout << "Lookback Fixed Strike option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(4);
-        LookbackOptionFixed* lookbackFixed = static_cast<LookbackOptionFixed*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(4);
+        LookbackOptionFixed* lookbackFixed = static_cast<LookbackOptionFixed*>(option.get());
 
         double timesteps;
         double simulations;
@@ -274,14 +257,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = lookbackFixed;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Lookback Floating") {
         cout << "Lookback Floating Strike option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        FloatingOption* option = takeFloatingOptionValues(2);
-        LookbackOptionFloating* lookbackFloating = static_cast<LookbackOptionFloating*>(option);
+        std::unique_ptr<FloatingOption> option = takeFloatingOptionValues(2);
+        LookbackOptionFloating* lookbackFloating = static_cast<LookbackOptionFloating*>(option.get());
 
         double timesteps;
         double simulations;
@@ -292,14 +275,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        floatingOptionsMap[optionName] = lookbackFloating;
+        floatingOptionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Barrier Down-In") {
         cout << "Barrier Down-In option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(5);
-        BarrierDownIn* barrierDownIn = static_cast<BarrierDownIn*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(5);
+        BarrierDownIn* barrierDownIn = static_cast<BarrierDownIn*>(option.get());
 
         double timesteps;
         double simulations;
@@ -310,14 +293,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = barrierDownIn;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Barrier Up-In") {
         cout << "Barrier Up-In option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(6);
-        BarrierUpIn* barrierUpIn = static_cast<BarrierUpIn*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(6);
+        BarrierUpIn* barrierUpIn = static_cast<BarrierUpIn*>(option.get());
 
         double timesteps;
         double simulations;
@@ -328,14 +311,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = barrierUpIn;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Barrier Down-Out") {
         cout << "Barrier Down-Out option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(7);
-        BarrierDownOut* barrierDownOut = static_cast<BarrierDownOut*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(7);
+        BarrierDownOut* barrierDownOut = static_cast<BarrierDownOut*>(option.get());
 
         double timesteps;
         double simulations;
@@ -346,14 +329,14 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = barrierDownOut;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else if (optionType == "Barrier Up-Out") {
         cout << "Barrier Up-Out option selected, fill in the appropriate parameters for the option one-by-one:" << endl;
         
-        Option* option = takeFixedOptionValues(8);
-        BarrierUpOut* barrierUpOut = static_cast<BarrierUpOut*>(option);
+        std::unique_ptr<Option> option = takeFixedOptionValues(8);
+        BarrierUpOut* barrierUpOut = static_cast<BarrierUpOut*>(option.get());
 
         double timesteps;
         double simulations;
@@ -364,7 +347,7 @@ void CommandLineInterface::createOption(const std::string& optionType) {
         cout << "Option priced successfully!" << endl;
 
         string optionName = nameOption(optionType);
-        optionsMap[optionName] = barrierUpOut;
+        optionsMap[optionName] = std::move(option);
         cout << "Option priced successfully and logged under the name -> " << optionName << endl;
     }
     else {

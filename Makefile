@@ -1,29 +1,34 @@
-CXX=g++
-CXXFLAGS=-I. -w -Wall -std=c++11
+# === Directories ===
+SRC_DIR := src
+INC_DIR := include
+OBJ_DIR := build
 
-# Adjusting header file paths correctly
-DEPS = options/option_class.hpp utils/utility_functions.hpp
-OBJ = build/main.o build/exotic_options.o build/vanilla_options.o
+# === Compiler & Flags ===
+CXX := g++
+CXXFLAGS := -std=c++17 -Wall -Wextra -I$(INC_DIR)
 
-# Linking all object files into the executable in the build directory
-main: $(OBJ)
-	$(CXX) -o build/main $^
+# === Source and Object Files ===
+CPP_FILES := $(shell find $(SRC_DIR) -name '*.cpp')
+OBJ_FILES := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(CPP_FILES))
 
-# Pattern rule for compiling source files
-build/%.o: %.cpp $(DEPS) | build
+# === Output Executable ===
+TARGET := $(OBJ_DIR)/optio
+
+# === Default Rule ===
+all: $(TARGET)
+
+# === Linking ===
+$(TARGET): $(OBJ_FILES)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $^ -o $@
+
+# === Compiling ===
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean rule to clean up the build directory
-.PHONY: clean
+# === Clean ===
 clean:
-	rm -rf build
+	rm -rf $(OBJ_DIR)
 
-# Ensure correct .cpp source paths, possibly adding specific rules for different directories
-build/main.o: main.cpp $(DEPS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-build/exotic_options.o: options/exotic_options.cpp $(DEPS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-build/vanilla_options.o: options/vanilla_options.cpp $(DEPS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+.PHONY: all clean
